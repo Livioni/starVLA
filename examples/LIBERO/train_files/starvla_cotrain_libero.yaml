@@ -1,8 +1,8 @@
 run_id: starvla
 run_root_dir: playground/Checkpoints
 seed: 42
-wandb_entity: your_wandb_entity
-wandb_project: llavavla
+wandb_entity: livion
+wandb_project: QwenGR00T-starvla-libero_all
 is_debug: false
 version_id: "0.21"
 
@@ -29,7 +29,7 @@ datasets:
     min_pixels: 784
     model_max_length: 2048
     model_type: qwen2.5vl
-    per_device_batch_size: 16
+    per_device_batch_size: 8
 
   vla_data:
     dataset_py: lerobot_datasets
@@ -38,7 +38,7 @@ datasets:
     action_type: delta_qpos
     sequential_step_sampling: False
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
-    per_device_batch_size: 16
+    per_device_batch_size: 8
     load_all_data_for_training: true
     video_backend: torchvision_av
 

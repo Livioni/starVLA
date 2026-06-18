@@ -1,11 +1,40 @@
+#!/usr/bin/env bash
 
+detect_nccl_socket_ifname() {
+  for iface_path in /sys/class/net/*; do
+    iface=${iface_path##*/}
+    case "${iface}" in
+      lo|docker*|br-*|veth*|virbr*|cvd-*) continue ;;
+    esac
+    state="unknown"
+    if [ -r "${iface_path}/operstate" ]; then
+      state=$(cat "${iface_path}/operstate")
+    fi
+    if [ "${state}" = "up" ] || [ "${state}" = "unknown" ]; then
+      printf '%s\n' "${iface}"
+      return 0
+    fi
+  done
+}
 
-export NCCL_SOCKET_IFNAME=bond0
-export NCCL_IB_HCA=mlx5_2,mlx5_3
+if [ -z "${NCCL_SOCKET_IFNAME:-}" ]; then
+  detected_ifname=$(detect_nccl_socket_ifname)
+  if [ -n "${detected_ifname}" ]; then
+    export NCCL_SOCKET_IFNAME="${detected_ifname}"
+    echo "Using NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME}"
+  else
+    echo "Warning: could not auto-detect NCCL_SOCKET_IFNAME; leaving it unset" >&2
+  fi
+else
+  echo "Using NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME}"
+fi
+
+# Set NCCL_IB_HCA in the environment only when your cluster requires a
+# specific InfiniBand device, for example: NCCL_IB_HCA=mlx5_2,mlx5_3 bash ...
 
 # used for check save when communication
-export NCCL_BLOCKING_WAIT=1
-export NCCL_ASYNC_ERROR_HANDLING=1
+export TORCH_NCCL_BLOCKING_WAIT=1
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=10000  # timeout set to 1 hour (unit: seconds)
 export NCCL_SOCKET_TIMEOUT_MS=360000
 ###########################################################################################
@@ -50,9 +79,6 @@ accelerate launch \
   --trainer.eval_interval 100 \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
-  --wandb_project starVLA_Libero \
-  --wandb_entity jinhuiye \
-  # --is_debug True
 
 
 

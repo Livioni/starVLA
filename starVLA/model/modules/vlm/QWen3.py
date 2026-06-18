@@ -47,16 +47,24 @@ class _QWen3_VL_Interface(nn.Module):
         super().__init__()
 
         qwenvl_config = config.framework.get("qwenvl", {})
+        trainer_config = config.get("trainer", {}) if config is not None else {}
         model_id = qwenvl_config.get("base_vlm", "Qwen/Qwen3-VL-4B-Instruct")
         attn_implementation = qwenvl_config.get("attn_implementation", "sdpa")
-        attn_implementation = "sdpa"
+        enable_grad_ckpt = bool(
+            qwenvl_config.get("enable_gradient_checkpointing", False)
+            or trainer_config.get("gradient_checkpointing", False)
+        )
         # Fallback to sdpa if flash_attention_2 is requested but flash_attn is not installed
         if attn_implementation == "flash_attention_2":
             try:
                 import flash_attn  # noqa: F401
-            except ImportError:
-                print("[WARNING] flash_attn not installed, falling back to sdpa")
+            except ImportError as exc:
+                print(
+                    f"[QWen3][WARNING] flash_attn is unavailable ({exc}); falling back to sdpa",
+                    flush=True,
+                )
                 attn_implementation = "sdpa"
+        print(f"[QWen3] using attn_implementation={attn_implementation}", flush=True)
 
         model = Qwen3VLForConditionalGeneration.from_pretrained(
             model_id,
@@ -66,6 +74,22 @@ class _QWen3_VL_Interface(nn.Module):
         )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.padding_side = "left"
+
+        if enable_grad_ckpt:
+            try:
+                model.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs={"use_reentrant": False}
+                )
+                if hasattr(model, "enable_input_require_grads"):
+                    model.enable_input_require_grads()
+                if hasattr(model.config, "use_cache"):
+                    model.config.use_cache = False
+                text_config = getattr(model.config, "text_config", None)
+                if text_config is not None and hasattr(text_config, "use_cache"):
+                    text_config.use_cache = False
+                print("[QWen3] gradient_checkpointing ENABLED (use_reentrant=False)", flush=True)
+            except Exception as e:
+                print(f"[QWen3] failed to enable gradient_checkpointing: {e}", flush=True)
 
         self.model = model
         self.processor = processor
